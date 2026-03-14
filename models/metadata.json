@@ -1,0 +1,19 @@
+{
+  "emotions": [
+    "angry",
+    "calm",
+    "disgust",
+    "fear",
+    "happy",
+    "neutral",
+    "ps",
+    "sad"
+  ],
+  "n_classes": 8,
+  "n_features": 218,
+  "sample_rate": 22050,
+  "duration": 3,
+  "best_model": "SVM",
+  "test_accuracy": 0.9219790675547098,
+  "train_test_split": "80/20"
+}
