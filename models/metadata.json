@@ -1,6 +1,7 @@
 {
   "emotions": [
     "angry",
+    "boredom",
     "calm",
     "disgust",
     "fear",
@@ -9,11 +10,11 @@
     "ps",
     "sad"
   ],
-  "n_classes": 8,
+  "n_classes": 9,
   "n_features": 218,
   "sample_rate": 22050,
   "duration": 3,
-  "best_model": "SVM",
-  "test_accuracy": 0.9219790675547098,
+  "best_model": "MLP",
+  "test_accuracy": 0.9613837489943685,
   "train_test_split": "80/20"
 }

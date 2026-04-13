@@ -1,11 +1,9 @@
 # %% [markdown]
 # # Speech-Based Emotion Recognition with Mood-Based Music Recommendation
-
 # The emotions we're trying to detect: neutral, calm, happy, sad, angry, fear, disgust, pleasant surprise (ps) and boredom.
 
 # %% [markdown]
-# Setup & Imports
-# Just loading up all the libraries.
+# ## Setup & Imports
 
 # %%
 import os
@@ -31,12 +29,10 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 warnings.filterwarnings('ignore')
-
 print("All imports successful!")
 
 # %% [markdown]
-# Constants & Configuration
-# Setting up the key parameters for audio processing and file paths.
+# ## Constants & Configuration
 
 # %%
 EMOTIONS = ["neutral", "calm", "happy", "sad", "angry", "fear", "disgust", "ps", "boredom"]
@@ -58,20 +54,13 @@ print(f"Models dir:   {os.path.abspath(MODELS_DIR)}")
 print(f"Results dir:  {os.path.abspath(RESULTS_DIR)}")
 
 # %% [markdown]
-# Feature Extraction
-# 
+# ## Feature Extraction
 # This is the heart of the project. We pull out 218 different features from each audio clip.
-# These features capture things like pitch, energy, rhythm, tone quality and how the sound
-# changes over time — basically everything that makes an angry voice sound different from a sad one.
 
 # %%
 def extract_features(file_path):
-    # Pulls out 218 audio features from a single audio file.
-    # Returns a numpy array of features, or None if something goes wrong.
     try:
         audio, sr = librosa.load(file_path, sr=SAMPLE_RATE, duration=DURATION)
-
-        # Make sure all clips are the same length
         target_len = SAMPLE_RATE * DURATION
         if len(audio) < target_len:
             audio = np.pad(audio, (0, target_len - len(audio)))
@@ -80,57 +69,46 @@ def extract_features(file_path):
 
         features = []
 
-        # MFCCs - the bread and butter of audio analysis
         mfccs = librosa.feature.mfcc(y=audio, sr=sr, n_mfcc=N_MFCC)
         features.extend(np.mean(mfccs.T, axis=0))
         features.extend(np.std(mfccs.T, axis=0))
 
-        # Mel-spectrogram - captures how energy is spread across frequencies
         mel_spec = librosa.feature.melspectrogram(y=audio, sr=sr, n_mels=N_MELS)
         features.extend(np.mean(mel_spec.T, axis=0)[:20])
         features.extend(np.std(mel_spec.T, axis=0)[:20])
 
-        # Chroma - relates to musical pitch classes
         chroma = librosa.feature.chroma_stft(y=audio, sr=sr, hop_length=HOP_LENGTH)
         features.extend(np.mean(chroma.T, axis=0))
         features.extend(np.std(chroma.T, axis=0))
 
-        # Spectral contrast
         contrast = librosa.feature.spectral_contrast(y=audio, sr=sr)
         features.extend(np.mean(contrast.T, axis=0))
         features.extend(np.std(contrast.T, axis=0))
 
-        # Tonnetz - tonal centroid features
         tonnetz = librosa.feature.tonnetz(y=audio, sr=sr)
         features.extend(np.mean(tonnetz.T, axis=0))
         features.extend(np.std(tonnetz.T, axis=0))
 
-        # Zero crossing rate
         zcr = librosa.feature.zero_crossing_rate(audio)
         features.append(np.mean(zcr))
         features.append(np.std(zcr))
 
-        # RMS energy - how loud the audio is
         rms = librosa.feature.rms(y=audio)
         features.append(np.mean(rms))
         features.append(np.std(rms))
 
-        # Spectral centroid
         centroid = librosa.feature.spectral_centroid(y=audio, sr=sr)
         features.append(np.mean(centroid))
         features.append(np.std(centroid))
 
-        # Spectral bandwidth
         bandwidth = librosa.feature.spectral_bandwidth(y=audio, sr=sr)
         features.append(np.mean(bandwidth))
         features.append(np.std(bandwidth))
 
-        # Spectral rolloff
         rolloff = librosa.feature.spectral_rolloff(y=audio, sr=sr)
         features.append(np.mean(rolloff))
         features.append(np.std(rolloff))
 
-        # Pitch features - important for telling apart happy vs fear
         try:
             pitches, magnitudes = librosa.piptrack(y=audio, sr=sr, threshold=0.1)
             pitch_vals = []
@@ -153,7 +131,6 @@ def extract_features(file_path):
         except:
             features.extend([0] * 6)
 
-        # Harmonic vs percussive
         try:
             y_harm, y_perc = librosa.effects.hpss(audio)
             features.append(np.sum(np.abs(y_harm)) / (np.sum(np.abs(audio)) + 1e-10))
@@ -163,7 +140,6 @@ def extract_features(file_path):
         except:
             features.extend([0] * 2)
 
-        # Formant-like spectral peaks
         try:
             fft_mag = np.abs(np.fft.fft(audio)[:len(audio)//2])
             freqs = np.fft.fftfreq(len(audio), 1/sr)[:len(fft_mag)]
@@ -178,7 +154,6 @@ def extract_features(file_path):
         except:
             features.extend([0] * 3)
 
-        # Temporal dynamics
         try:
             frames_e = []
             for i in range(0, len(audio) - 2048, 512):
@@ -192,7 +167,6 @@ def extract_features(file_path):
         except:
             features.extend([0] * 2)
 
-        # Spectral flux
         try:
             stft_mag = np.abs(librosa.stft(audio, hop_length=HOP_LENGTH))
             flux = np.sum(np.diff(stft_mag, axis=1)**2, axis=0)
@@ -201,7 +175,6 @@ def extract_features(file_path):
         except:
             features.extend([0] * 2)
 
-        # Voice quality - jitter and shimmer approximations
         try:
             zcr_f = librosa.feature.zero_crossing_rate(audio, frame_length=2048, hop_length=512)[0]
             features.append(np.std(zcr_f) / (np.mean(zcr_f) + 1e-10) if len(zcr_f) > 1 else 0)
@@ -210,14 +183,12 @@ def extract_features(file_path):
         except:
             features.extend([0] * 2)
 
-        # Spectral centroid variation
         try:
             cf = librosa.feature.spectral_centroid(y=audio, sr=sr)[0]
             features.append(np.std(cf) / (np.mean(cf) + 1e-10) if len(cf) > 1 else 0)
         except:
             features.append(0)
 
-        # Onset detection
         try:
             onsets = librosa.onset.onset_detect(y=audio, sr=sr, units='time')
             if len(onsets) > 0:
@@ -235,7 +206,6 @@ def extract_features(file_path):
         except:
             features.extend([0] * 4)
 
-        # Energy across frequency bands
         try:
             stft_m = np.abs(librosa.stft(audio, hop_length=HOP_LENGTH))
             fr = librosa.fft_frequencies(sr=sr, n_fft=len(stft_m))
@@ -248,7 +218,6 @@ def extract_features(file_path):
         except:
             features.extend([0] * 4)
 
-        # Spectral tilt
         try:
             stft_m = np.abs(librosa.stft(audio, hop_length=HOP_LENGTH))
             fr = librosa.fft_frequencies(sr=sr, n_fft=len(stft_m))
@@ -263,7 +232,6 @@ def extract_features(file_path):
         except:
             features.append(0)
 
-        # Speech rate and rhythm
         try:
             rms_r = librosa.feature.rms(y=audio, frame_length=2048, hop_length=512)[0]
             thr = np.percentile(rms_r, 30)
@@ -280,7 +248,6 @@ def extract_features(file_path):
         except:
             features.extend([0] * 2)
 
-        # Spectral smoothness
         try:
             stft_m = np.abs(librosa.stft(audio, hop_length=HOP_LENGTH))
             ss = [1.0/(np.std(stft_m[:,t])/(np.mean(stft_m[:,t])+1e-10)+1e-10)
@@ -290,7 +257,6 @@ def extract_features(file_path):
         except:
             features.extend([0] * 2)
 
-        # Pitch contour
         try:
             pitches, magnitudes = librosa.piptrack(y=audio, sr=sr, threshold=0.1)
             pv2 = []
@@ -308,7 +274,6 @@ def extract_features(file_path):
         except:
             features.extend([0] * 2)
 
-        # Attack and decay characteristics
         try:
             rms_ad = librosa.feature.rms(y=audio, frame_length=2048, hop_length=512)[0]
             if len(rms_ad) > 10:
@@ -325,7 +290,6 @@ def extract_features(file_path):
         except:
             features.extend([0] * 4)
 
-        # Formant bandwidth
         try:
             stft_m = np.abs(librosa.stft(audio, hop_length=HOP_LENGTH))
             fr = librosa.fft_frequencies(sr=sr, n_fft=len(stft_m))
@@ -354,14 +318,11 @@ print(f"Feature extraction function ready.")
 print(f"Expected features per sample: 218")
 
 # %% [markdown]
-# Dataset Loading
-# 
-# Loading audio files from the RAVDESS and TESS datasets. Each file gets its emotion
-# label parsed from the filename or folder name, then we extract all 218 features from it.
+# ## Dataset Loading
+# Loading audio files from RAVDESS, TESS, and EMO-DB datasets.
 
 # %%
 def load_dataset(data_path=DATA_PATH):
-    # Loads audio files from RAVDESS, TESS, and any custom data
     features, labels = [], []
 
     # RAVDESS
@@ -430,6 +391,36 @@ def load_dataset(data_path=DATA_PATH):
     else:
         print(f"  TESS not found at {tess_path}")
 
+    # EMO-DB (Berlin Emotional Speech Database - gives us BOREDOM)
+    emodb_path = os.path.join(data_path, "EMO-DB", "wav")
+    print("Processing EMO-DB dataset...")
+    if os.path.exists(emodb_path):
+        emodb_count = 0
+        emodb_map = {
+            'W': 'angry',
+            'L': 'boredom',
+            'E': 'disgust',
+            'A': 'fear',
+            'F': 'happy',
+            'T': 'sad',
+            'N': 'neutral',
+        }
+        for f in os.listdir(emodb_path):
+            if not f.endswith(".wav"):
+                continue
+            if len(f) >= 7:
+                emo_letter = f[5]
+                emotion = emodb_map.get(emo_letter)
+                if emotion and emotion in EMOTIONS:
+                    feat = extract_features(os.path.join(emodb_path, f))
+                    if feat is not None:
+                        features.append(feat)
+                        labels.append(emotion)
+                        emodb_count += 1
+        print(f"  Loaded {emodb_count} EMO-DB samples")
+    else:
+        print(f"  EMO-DB not found at {emodb_path}")
+
     # Custom data
     custom_path = os.path.join(data_path, "custom")
     if os.path.exists(custom_path):
@@ -453,15 +444,12 @@ def load_dataset(data_path=DATA_PATH):
     return np.array(features), np.array(labels)
 
 # %%
-# This cell takes a while since it has to process every audio file
 X, y = load_dataset()
-
 print(f"\nDataset shape: {X.shape}")
 print(f"Features per sample: {X.shape[1]}")
 
 # %% [markdown]
-# Data Exploration
-# Let's see how the data is distributed across emotions.
+# ## Data Exploration
 
 # %%
 print("Class Distribution:")
@@ -470,7 +458,6 @@ for emo, cnt in zip(unique_emos, counts):
     print(f"  {emo:<15} {cnt:>5} samples")
 
 fig, ax = plt.subplots(figsize=(10, 5))
-
 colors_map = {'neutral':'#95a5a6','calm':'#3498db','happy':'#f1c40f','sad':'#2980b9',
               'angry':'#e74c3c','fear':'#9b59b6','disgust':'#27ae60','ps':'#e67e22','boredom':'#34495e'}
 bar_colors = [colors_map.get(e, '#bdc3c7') for e in unique_emos]
@@ -479,19 +466,15 @@ ax.set_title("Samples per Emotion", fontweight='bold', fontsize=14)
 ax.set_ylabel("Count")
 ax.set_xlabel("Emotion")
 ax.tick_params(axis='x', rotation=45)
-
 plt.tight_layout()
 plt.savefig(os.path.join(RESULTS_DIR, "data_exploration.png"), dpi=150, bbox_inches='tight')
 plt.show()
-print(f"Plot saved to {RESULTS_DIR}/data_exploration.png")
 
 # %% [markdown]
-# Train/Test Split and Model Training
-# Splitting the data 80/20 and training four different models to see which one works best.
+# ## Train/Test Split and Model Training
 
 # %%
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
-
 print(f"Training set: {X_train.shape[0]} samples")
 print(f"Test set:     {X_test.shape[0]} samples")
 
@@ -502,11 +485,9 @@ y_test_encoded = le.transform(y_test)
 scaler = StandardScaler()
 X_train_scaled = scaler.fit_transform(X_train)
 X_test_scaled = scaler.transform(X_test)
-
 print(f"Classes: {list(le.classes_)}")
 
 # %%
-# Training all four models
 models = {
     'SVM': SVC(kernel='rbf', C=10, gamma='scale', probability=True, random_state=42),
     'Random_Forest': RandomForestClassifier(n_estimators=200, max_depth=20, random_state=42),
@@ -515,17 +496,12 @@ models = {
 }
 
 results = {}
-
 for name, model in models.items():
     print(f"Training {name}...", end=" ")
     model.fit(X_train_scaled, y_train_encoded)
     y_pred = model.predict(X_test_scaled)
     acc = accuracy_score(y_test_encoded, y_pred)
-    results[name] = {
-        'model': model,
-        'accuracy': acc,
-        'predictions': y_pred,
-    }
+    results[name] = {'model': model, 'accuracy': acc, 'predictions': y_pred}
     print(f"Accuracy: {acc:.4f}")
 
 best_name = max(results, key=lambda x: results[x]['accuracy'])
@@ -533,8 +509,7 @@ best_acc = results[best_name]['accuracy']
 print(f"\nBest model: {best_name} ({best_acc:.4f})")
 
 # %% [markdown]
-# Evaluation & Results
-# Let's look at how the models compare and where the best one gets things right or wrong.
+# ## Evaluation & Results
 
 # %%
 print("MODEL RANKINGS")
@@ -544,7 +519,6 @@ for i, (name, res) in enumerate(ranked, 1):
 
 # %%
 fig, axes = plt.subplots(1, 3, figsize=(18, 5))
-
 model_names = list(results.keys())
 colors = ['#3498db', '#2ecc71', '#e74c3c', '#f39c12']
 accs = [results[m]['accuracy'] for m in model_names]
@@ -552,8 +526,7 @@ accs = [results[m]['accuracy'] for m in model_names]
 ax = axes[0]
 bars = ax.bar(model_names, accs, color=colors, alpha=0.8)
 for b, a in zip(bars, accs):
-    ax.text(b.get_x()+b.get_width()/2, b.get_height()+0.01,
-            f'{a:.3f}', ha='center', fontweight='bold', fontsize=10)
+    ax.text(b.get_x()+b.get_width()/2, b.get_height()+0.01, f'{a:.3f}', ha='center', fontweight='bold', fontsize=10)
 ax.set_title("Model Accuracy", fontweight='bold')
 ax.set_ylabel("Accuracy")
 ax.set_ylim(0, 1)
@@ -566,7 +539,7 @@ cm = confusion_matrix(y_test_encoded, best_pred)
 cm_norm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
 sns.heatmap(cm_norm, annot=True, fmt='.2f', cmap='Blues',
             xticklabels=le.classes_, yticklabels=le.classes_, ax=ax)
-ax.set_title(f"Confusion Matrix — {best_name}", fontweight='bold')
+ax.set_title(f"Confusion Matrix - {best_name}", fontweight='bold')
 ax.set_xlabel("Predicted")
 ax.set_ylabel("True")
 
@@ -574,7 +547,7 @@ ax = axes[2]
 per_class_acc = cm_norm.diagonal()
 bar_c = [colors_map.get(e, '#bdc3c7') for e in le.classes_]
 ax.barh(le.classes_, per_class_acc, color=bar_c, alpha=0.8)
-ax.set_title(f"Per-Class Accuracy — {best_name}", fontweight='bold')
+ax.set_title(f"Per-Class Accuracy - {best_name}", fontweight='bold')
 ax.set_xlabel("Accuracy")
 ax.set_xlim(0, 1)
 ax.grid(axis='x', alpha=0.3)
@@ -585,13 +558,11 @@ plt.savefig(os.path.join(RESULTS_DIR, "model_results.png"), dpi=200, bbox_inches
 plt.show()
 
 # %%
-print(f"\nClassification Report — {best_name}")
-print(classification_report(y_test_encoded, best_pred,
-                            target_names=le.classes_, digits=3))
+print(f"\nClassification Report - {best_name}")
+print(classification_report(y_test_encoded, best_pred, target_names=le.classes_, digits=3))
 
 # %% [markdown]
 # ## Save Final Model
-# Saving everything so we can load the model later without retraining.
 
 # %%
 final_model = results[best_name]['model']
@@ -624,13 +595,11 @@ print(f"Saved to {MODELS_DIR}/:")
 for fn in os.listdir(MODELS_DIR):
     print(f"  {fn}")
 
-# %%
-# Predict Emotion on a New Audio File
-# Use this to test the trained model on any audio file you want.
+# %% [markdown]
+# ## Predict Emotion on a New Audio File
 
 # %%
 def predict_emotion(audio_path, model=None, scaler=None, label_encoder=None):
-    # Give it an audio file and it tells you what emotion it detects.
     if model is None:
         model = joblib.load(os.path.join(MODELS_DIR, f'{best_name.lower()}.joblib'))
     if scaler is None:
@@ -652,15 +621,13 @@ def predict_emotion(audio_path, model=None, scaler=None, label_encoder=None):
     feat_scaled = scaler.transform(feat.reshape(1, -1))
     probs = model.predict_proba(feat_scaled)[0]
     emotions = label_encoder.classes_
-
     results = {emo: float(p) for emo, p in zip(emotions, probs)}
     dominant = max(results, key=results.get)
-
     return results, dominant
 
 # %%
-# Change this to point to an actual audio file you want to test
-TEST_FILE = "data/RAVDESS/Actor_02/01-01-01-01-02-01-02.mp4"
+# Change this to an actual .wav file from your data folder
+TEST_FILE = "data/EMO-DB/wav/03a01Fa.wav"
 
 if os.path.exists(TEST_FILE):
     res, dominant = predict_emotion(TEST_FILE)
@@ -683,27 +650,21 @@ if os.path.exists(TEST_FILE):
         plt.show()
 else:
     print(f"Test file not found: {TEST_FILE}")
-    print("Update the TEST_FILE variable above.")
+    print("Update the TEST_FILE variable above to point to a real .wav file.")
 
-# %% 
-# Song Recommendation System
-# 
-# Based on whatever emotion the model detects,model trained to recommend songs to uplift the user's mood.
-# 
-# For example if you're feeling sad, it won't just play sad songs, it'll recommend
-# upbeat high-energy tracks to help lift your mood.
+# %% [markdown]
+# ## Song Recommendation System
+# Based on whatever emotion the model detects, we recommend songs to uplift the user's mood.
 
 # %%
 from song_recommender import get_recommendations, format_recommendations, EMOTION_TARGET_PROFILES
 
-# Let's see what the system recommends for each emotion
-for emo in ['happy', 'sad', 'angry', 'fear', 'calm', 'neutral', 'disgust', 'ps']:
+for emo in ['happy', 'sad', 'angry', 'fear', 'calm', 'neutral', 'disgust', 'ps', 'boredom']:
     print(f"  Detected Emotion: {emo.upper()}")
     recs = get_recommendations(emo, num_recommendations=5)
     print(format_recommendations(recs))
 
 # %%
-# Visualize what kind of music each emotion needs
 emotions_to_plot = ['happy', 'sad', 'angry', 'fear', 'calm', 'neutral']
 features_to_plot = ['valence', 'energy', 'tempo', 'danceability', 'acousticness']
 
@@ -731,13 +692,11 @@ ax.set_xticks(x + width * 2.5)
 ax.set_xticklabels([f.capitalize() for f in features_to_plot])
 ax.legend()
 ax.grid(axis='y', alpha=0.3)
-
 plt.tight_layout()
 plt.savefig(os.path.join(RESULTS_DIR, "mood_profiles.png"), dpi=150, bbox_inches='tight')
 plt.show()
 
 # %%
-# Demo: show recommendations for a sample emotion
 demo_emotion = 'sad'
 print(f"Demo: If someone sounds {demo_emotion.upper()}, we'd recommend:\n")
 recs = get_recommendations(demo_emotion, num_recommendations=5)
